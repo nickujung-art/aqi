@@ -110,9 +110,9 @@
   /* 서브 카드 */
   #subcards {
     display: flex;
-    gap: 9px;
-    margin-top: 22px;
-    padding: 0 24px;
+    gap: 7px;
+    margin-top: 20px;
+    padding: 0 20px;
     width: 100%;
     max-width: 720px;
   }
@@ -122,15 +122,16 @@
     background: rgba(255,255,255,.04);
     border: 1px solid rgba(255,255,255,.08);
     border-radius: 15px;
-    padding: 13px 14px;
+    padding: 12px 10px;
     display: flex;
     flex-direction: column;
     gap: 3px;
+    overflow: hidden;
   }
   .card-label { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(255,255,255,.38); letter-spacing: .14em; font-weight: 500; }
-  .card-value { font-family: 'DM Mono', monospace; font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
-  .card-unit  { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(255,255,255,.28); margin-left: 2px; }
-  .card-sub   { font-size: 10px; font-weight: 600; margin-top: 2px; }
+  .card-value { font-family: 'DM Mono', monospace; font-size: clamp(18px, 3.5vw, 30px); font-weight: 700; line-height: 1; letter-spacing: -.02em; white-space: nowrap; }
+  .card-unit  { font-family: 'DM Mono', monospace; font-size: 9px; color: rgba(255,255,255,.28); margin-left: 1px; }
+  .card-sub   { font-size: 10px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
 
   /* 로딩 */
   #loading {
@@ -391,9 +392,15 @@ function renderData(d) {
   const p25color = d.pm25Grade ? gradeColor(d.pm25Grade) : p25.color;
   const p25label = d.pm25Grade ? gradeText(d.pm25Grade)  : p25.label;
 
+  const fmt = (id, val) => {
+    if (val == null) return "—";
+    if (id === "o3" || id === "no2") return Math.round(val);
+    if (id === "co" || id === "so2") return parseFloat(val).toFixed(2);
+    return Math.round(val);
+  };
   const set = (id, val, color, sublabel, subcolor) => {
     const el = document.getElementById("val-"+id);
-    if (el) { el.textContent = val != null ? (id === "o3" || id === "co" || id === "so2" ? parseFloat(val).toFixed(3) : Math.round(val)) : "—"; if(color) el.style.color = color; }
+    if (el) { el.textContent = fmt(id, val); if(color) el.style.color = color; }
     const sb = document.getElementById("sub-"+id);
     if (sb && sublabel) { sb.textContent = sublabel; sb.style.color = subcolor || color; }
   };
