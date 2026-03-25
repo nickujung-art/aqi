@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>창원 공기질</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width:100%; height:100%; overflow:hidden; -webkit-tap-highlight-color:transparent; user-select:none; }
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: #080810;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    transition: background 1.8s ease;
+  }
+
+  #glow {
+    position: fixed; top: -5%; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 600px; border-radius: 50%;
+    pointer-events: none; z-index: 0; transition: background 1.8s ease;
+  }
+
+  /* ── 헤더 ── */
+  #header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 24px 28px 0; position: relative; z-index: 1; flex-shrink: 0;
+  }
+  #date-day  { font-size: 13px; color: rgba(255,255,255,.45); font-weight: 300; letter-spacing:.06em; }
+  #date-full { font-size: 24px; font-weight: 700; margin-top: 2px; letter-spacing:-.01em; }
+  #clock     { font-family:'DM Mono',monospace; font-size:46px; font-weight:300; letter-spacing:-.03em; line-height:1; text-align:right; }
+  #clock-sep { animation: blink 1s step-end infinite; opacity:.4; }
+  #location  { font-family:'DM Mono',monospace; font-size:10px; color:rgba(255,255,255,.28); margin-top:3px; text-align:right; }
+
+  /* ── 본문 ── */
+  #body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; z-index:1; gap:0; padding: 0 0 4px; }
+
+  /* ── AQI 섹션 ── */
+  #aqi-section { display:flex; flex-direction:column; align-items:center; }
+  #gauge-wrap  { position:relative; width:200px; height:200px; }
+  #gauge-svg   { transform:rotate(-90deg); }
+  #gauge-track { fill:none; stroke:rgba(255,255,255,.06); }
+  #gauge-fill  { fill:none; stroke-linecap:round; stroke-dasharray:0 10000; transition:stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1), stroke 1.8s ease; }
+  #gauge-inner { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  #aqi-label   { font-family:'DM Mono',monospace; font-size:10px; color:rgba(255,255,255,.35); letter-spacing:.18em; }
+  #aqi-value   { font-family:'DM Mono',monospace; font-size:76px; font-weight:900; line-height:1; transition:color 1.8s ease; }
+  #aqi-grade   { font-size:18px; font-weight:700; margin-top:-2px; transition:color 1.8s ease; }
+
+  #pm25-badge  { margin-top:10px; border-radius:20px; padding:5px 16px; font-size:13px; font-weight:500; display:none; transition:all 1.8s ease; }
+
+  /* ── 공기질 카드 ── */
+  #air-cards { display:flex; gap:6px; margin-top:12px; padding:0 18px; width:100%; max-width:680px; }
+  .acard { flex:1; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:13px; padding:10px 10px; display:flex; flex-direction:column; gap:2px; overflow:hidden; }
+  .acard-label { font-family:'DM Mono',monospace; font-size:9px; color:rgba(255,255,255,.38); letter-spacing:.12em; font-weight:500; }
+  .acard-value { font-family:'DM Mono',monospace; font-size:clamp(16px,3vw,26px); font-weight:700; line-height:1; letter-spacing:-.02em; white-space:nowrap; }
+  .acard-unit  { font-family:'DM Mono',monospace; font-size:8px; color:rgba(255,255,255,.28); margin-left:1px; }
+  .acard-sub   { font-size:9px; font-weight:600; margin-top:1px; white-space:nowrap; }
+
+  /* ── 구분선 ── */
+  .divider { width:calc(100% - 36px); max-width:680px; height:1px; background:rgba(255,255,255,.07); margin:10px 0; flex-shrink:0; }
+
+  /* ── 날씨 섹션 ── */
+  #weather-section { display:flex; flex-direction:column; align-items:center; width:100%; gap:8px; }
+
+  /* 현재 날씨 */
+  #current-weather { display:flex; align-items:center; justify-content:center; gap:16px; padding:0 24px; width:100%; max-width:680px; }
+  #weather-icon-wrap { display:flex; flex-direction:column; align-items:center; gap:2px; }
+  #weather-icon { font-size:42px; line-height:1; }
+  #weather-desc { font-size:11px; color:rgba(255,255,255,.5); text-align:center; white-space:nowrap; }
+  #temp-main    { display:flex; flex-direction:column; align-items:flex-start; }
+  #temp-value   { font-family:'DM Mono',monospace; font-size:52px; font-weight:300; line-height:1; letter-spacing:-.03em; }
+  #temp-feels   { font-size:11px; color:rgba(255,255,255,.45); margin-top:2px; }
+
+  #weather-details { display:flex; flex-direction:column; gap:5px; flex:1; }
+  .wrow { display:flex; align-items:center; gap:6px; }
+  .wrow-icon  { font-size:13px; width:18px; text-align:center; }
+  .wrow-label { font-size:10px; color:rgba(255,255,255,.4); width:36px; flex-shrink:0; }
+  .wrow-value { font-family:'DM Mono',monospace; font-size:13px; font-weight:500; color:rgba(255,255,255,.85); }
+
+  /* 내일 예보 */
+  #tomorrow-section { display:flex; flex-direction:column; align-items:center; width:100%; max-width:680px; padding:0 18px; }
+  #tomorrow-label { font-size:10px; color:rgba(255,255,255,.35); letter-spacing:.1em; font-weight:500; margin-bottom:6px; align-self:flex-start; }
+  #tomorrow-card {
+    width:100%; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+    border-radius:13px; padding:10px 16px;
+    display:flex; align-items:center; gap:12px;
+  }
+  #tmr-icon  { font-size:28px; }
+  #tmr-desc  { font-size:11px; color:rgba(255,255,255,.45); flex:1; }
+  .tmr-stat  { display:flex; flex-direction:column; align-items:center; gap:1px; }
+  .tmr-stat-label { font-size:9px; color:rgba(255,255,255,.35); letter-spacing:.08em; }
+  .tmr-stat-value { font-family:'DM Mono',monospace; font-size:16px; font-weight:600; }
+
+  /* ── 로딩 ── */
+  #loading { display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .spinner { width:28px; height:28px; border:2px solid rgba(255,255,255,.12); border-top-color:rgba(255,255,255,.5); border-radius:50%; animation:spin .9s linear infinite; }
+  #loading-text { font-size:13px; color:rgba(255,255,255,.3); letter-spacing:.08em; }
+
+  /* ── 푸터 ── */
+  #footer { display:flex; justify-content:space-between; align-items:center; padding:0 28px 16px; position:relative; z-index:1; flex-shrink:0; }
+  #footer-left  { font-family:'DM Mono',monospace; font-size:9px; color:rgba(255,255,255,.2); display:flex; align-items:center; gap:6px; }
+  #footer-right { display:flex; align-items:center; gap:8px; }
+  #updated-text { font-family:'DM Mono',monospace; font-size:9px; color:rgba(255,255,255,.2); }
+  #source-badge { font-family:'DM Mono',monospace; font-size:8px; border-radius:7px; padding:1px 6px; display:none; }
+  #refresh-btn  { background:none; border:1px solid rgba(255,255,255,.12); color:rgba(255,255,255,.28); border-radius:14px; padding:3px 11px; cursor:pointer; font-size:9px; font-family:'DM Mono',monospace; -webkit-appearance:none; }
+  #refresh-btn:active { border-color:rgba(255,255,255,.5); color:rgba(255,255,255,.8); }
+
+  @keyframes blink { 50% { opacity:0; } }
+  @keyframes spin  { to { transform:rotate(360deg); } }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  .pop { animation:pulse .35s ease; }
+</style>
+</head>
+<body>
+
+<div id="glow"></div>
+
+<!-- 헤더 -->
+<div id="header">
+  <div>
+    <div id="date-day"></div>
+    <div id="date-full"></div>
+  </div>
+  <div>
+    <div id="clock"><span id="hh">--</span><span id="clock-sep">:</span><span id="mm">--</span></div>
+    <div id="location">경상남도 창원시 대원동</div>
+  </div>
+</div>
+
+<!-- 본문 -->
+<div id="body">
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loading-text">데이터 로딩 중…</div>
+  </div>
+
+  <div id="data-view" style="display:none; flex-direction:column; align-items:center; width:100%; gap:0;">
+
+    <!-- AQI 게이지 -->
+    <div id="aqi-section">
+      <div id="gauge-wrap">
+        <svg id="gauge-svg" width="200" height="200">
+          <circle id="gauge-track" cx="100" cy="100" r="88" stroke-width="8"/>
+          <circle id="gauge-fill"  cx="100" cy="100" r="88" stroke-width="8"/>
+        </svg>
+        <div id="gauge-inner">
+          <div id="aqi-label">AQI</div>
+          <div id="aqi-value">—</div>
+          <div id="aqi-grade">—</div>
+        </div>
+      </div>
+      <div id="pm25-badge"></div>
+    </div>
+
+    <!-- 공기질 서브 카드 -->
+    <div id="air-cards">
+      <div class="acard">
+        <div class="acard-label">PM10</div>
+        <div><span class="acard-value" id="val-pm10">—</span><span class="acard-unit">㎍/㎥</span></div>
+        <div class="acard-sub" id="sub-pm10"></div>
+      </div>
+      <div class="acard">
+        <div class="acard-label">PM2.5</div>
+        <div><span class="acard-value" id="val-pm25">—</span><span class="acard-unit">㎍/㎥</span></div>
+        <div class="acard-sub" id="sub-pm25"></div>
+      </div>
+      <div class="acard">
+        <div class="acard-label">O₃</div>
+        <div><span class="acard-value" id="val-o3" style="color:#A78BFA">—</span><span class="acard-unit">ppb</span></div>
+      </div>
+      <div class="acard">
+        <div class="acard-label">NO₂</div>
+        <div><span class="acard-value" id="val-no2" style="color:#F0A8D0">—</span><span class="acard-unit">ppb</span></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- 날씨 섹션 -->
+    <div id="weather-section">
+      <div id="current-weather">
+        <!-- 날씨 아이콘 + 설명 -->
+        <div id="weather-icon-wrap">
+          <div id="weather-icon">—</div>
+          <div id="weather-desc">—</div>
+        </div>
+        <!-- 기온 -->
+        <div id="temp-main">
+          <div id="temp-value"><span id="val-temp">—</span><span style="font-size:28px;opacity:.5">°</span></div>
+          <div id="temp-feels">체감 <span id="val-feels">—</span>°</div>
+        </div>
+        <!-- 세부 날씨 -->
+        <div id="weather-details">
+          <div class="wrow">
+            <span class="wrow-icon">💧</span>
+            <span class="wrow-label">습도</span>
+            <span class="wrow-value"><span id="val-hum">—</span>%</span>
+          </div>
+          <div class="wrow">
+            <span class="wrow-icon">🌧</span>
+            <span class="wrow-label">강수</span>
+            <span class="wrow-value"><span id="val-precip">—</span>mm</span>
+          </div>
+          <div class="wrow">
+            <span class="wrow-icon">💨</span>
+            <span class="wrow-label">바람</span>
+            <span class="wrow-value"><span id="val-wind">—</span>m/s</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 내일 예보 -->
+      <div id="tomorrow-section">
+        <div id="tomorrow-label">내일 예보</div>
+        <div id="tomorrow-card">
+          <div id="tmr-icon">—</div>
+          <div id="tmr-desc">—</div>
+          <div class="tmr-stat">
+            <div class="tmr-stat-label">최고</div>
+            <div class="tmr-stat-value" id="tmr-high" style="color:#F67A5B">—°</div>
+          </div>
+          <div class="tmr-stat">
+            <div class="tmr-stat-label">최저</div>
+            <div class="tmr-stat-value" id="tmr-low" style="color:#93C5FD">—°</div>
+          </div>
+          <div class="tmr-stat">
+            <div class="tmr-stat-label">강수</div>
+            <div class="tmr-stat-value" id="tmr-precip" style="color:#5BCCF6">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 푸터 -->
+<div id="footer">
+  <div id="footer-left">
+    <span id="station-name"></span>
+    <span id="source-badge"></span>
+  </div>
+  <div id="footer-right">
+    <span id="updated-text"></span>
+    <button id="refresh-btn" onclick="fetchAll()">↻ 새로고침</button>
+  </div>
+</div>
+
+<script>
+const WAQI_TOKEN = "bcbd525a5cf17beb6ce3800e18f8238e523c12f2";
+const LAT = 35.2271, LON = 128.6817;
+
+/* ── 등급 ── */
+const AQI_LEVELS = [
+  { max:50,  label:"좋음",    color:"#5BCCF6", glow:"rgba(91,204,246,.28)",  bg:"#06141f" },
+  { max:100, label:"보통",    color:"#5BF6A0", glow:"rgba(91,246,160,.28)",  bg:"#061a0e" },
+  { max:250, label:"나쁨",    color:"#F6C15B", glow:"rgba(246,193,91,.28)",  bg:"#181000" },
+  { max:9999,label:"매우나쁨", color:"#F67A5B", glow:"rgba(246,122,91,.28)",  bg:"#180700" },
+];
+const PM25_LVL = [
+  {max:15,label:"좋음",   color:"#5BCCF6"},{max:35,label:"보통",   color:"#5BF6A0"},
+  {max:75,label:"나쁨",   color:"#F6C15B"},{max:9999,label:"매우나쁨",color:"#F67A5B"},
+];
+const PM10_LVL = [
+  {max:30,label:"좋음",   color:"#5BCCF6"},{max:80,label:"보통",   color:"#5BF6A0"},
+  {max:150,label:"나쁨",  color:"#F6C15B"},{max:9999,label:"매우나쁨",color:"#F67A5B"},
+];
+const getLevel = (v, t) => t.find(l => v <= l.max) || t[t.length-1];
+
+/* ── WMO 날씨 코드 → 아이콘·설명 ── */
+function wxCode(code) {
+  if (code === 0)              return ["☀️","맑음"];
+  if (code <= 2)               return ["🌤","구름 조금"];
+  if (code === 3)              return ["☁️","흐림"];
+  if (code <= 49)              return ["🌫","안개"];
+  if (code <= 59)              return ["🌦","이슬비"];
+  if (code <= 69)              return ["🌧","비"];
+  if (code <= 79)              return ["🌨","눈"];
+  if (code <= 84)              return ["🌦","소나기"];
+  if (code <= 99)              return ["⛈","뇌우"];
+  return ["🌡","알수없음"];
+}
+
+/* ── 계절 평균 폴백 ── */
+const SEASONAL = [
+  {aqi:75,pm25:22,pm10:52,o3:18,no2:22,humidity:62,temp:3,  precip:0,wind:2.5,feels:1,  wcode:3},
+  {aqi:80,pm25:25,pm10:58,o3:20,no2:23,humidity:60,temp:5,  precip:0,wind:3.0,feels:2,  wcode:2},
+  {aqi:85,pm25:28,pm10:65,o3:28,no2:20,humidity:58,temp:10, precip:2,wind:3.5,feels:8,  wcode:61},
+  {aqi:72,pm25:20,pm10:50,o3:35,no2:18,humidity:62,temp:16, precip:3,wind:3.0,feels:15, wcode:61},
+  {aqi:60,pm25:16,pm10:38,o3:40,no2:16,humidity:65,temp:21, precip:5,wind:2.5,feels:21, wcode:2},
+  {aqi:45,pm25:12,pm10:28,o3:38,no2:14,humidity:72,temp:25, precip:8,wind:2.0,feels:27, wcode:80},
+  {aqi:35,pm25:9, pm10:22,o3:32,no2:12,humidity:80,temp:28, precip:15,wind:2.0,feels:31,wcode:80},
+  {aqi:38,pm25:10,pm10:24,o3:30,no2:13,humidity:78,temp:29, precip:12,wind:2.5,feels:33,wcode:80},
+  {aqi:48,pm25:13,pm10:32,o3:26,no2:16,humidity:68,temp:23, precip:4,wind:2.5,feels:23, wcode:2},
+  {aqi:62,pm25:18,pm10:44,o3:20,no2:19,humidity:63,temp:17, precip:2,wind:3.0,feels:15, wcode:3},
+  {aqi:70,pm25:21,pm10:50,o3:16,no2:22,humidity:60,temp:10, precip:1,wind:3.5,feels:7,  wcode:3},
+  {aqi:78,pm25:24,pm10:56,o3:14,no2:24,humidity:62,temp:4,  precip:0,wind:3.0,feels:1,  wcode:3},
+];
+const rnd = n => Math.round((Math.random()-.5)*n);
+const seasonal = () => {
+  const b = SEASONAL[new Date().getMonth()];
+  return {
+    aqi:Math.max(10,b.aqi+rnd(18)), pm25:Math.max(3,b.pm25+rnd(8)),
+    pm10:Math.max(8,b.pm10+rnd(16)), o3:Math.max(5,b.o3+rnd(8)), no2:Math.max(4,b.no2+rnd(6)),
+    humidity:b.humidity+rnd(8), temp:b.temp+rnd(3), precip:Math.max(0,b.precip+rnd(3)),
+    wind:Math.max(0,b.wind+rnd(1)), feels:b.feels+rnd(3), wcode:b.wcode,
+    tmrHigh:b.temp+rnd(4)+2, tmrLow:b.temp+rnd(3)-3,
+    tmrPrecip:Math.max(0,b.precip+rnd(4)), tmrCode:b.wcode,
+    station:"창원시 대원동", source:"계절 평균",
+  };
+};
+
+/* ── 시계 ── */
+function updateClock() {
+  const n = new Date();
+  document.getElementById("hh").textContent = String(n.getHours()).padStart(2,"0");
+  document.getElementById("mm").textContent = String(n.getMinutes()).padStart(2,"0");
+  const DAYS   = ["일요일","월요일","화요일","수요일","목요일","금요일","토요일"];
+  const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+  document.getElementById("date-day").textContent  = DAYS[n.getDay()];
+  document.getElementById("date-full").textContent = `${MONTHS[n.getMonth()]} ${n.getDate()}일`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ── 게이지 ── */
+function drawGauge(aqi, color) {
+  const circ = 2 * Math.PI * 88;
+  const dash = Math.min(aqi/300, 1) * circ;
+  const f = document.getElementById("gauge-fill");
+  f.style.strokeDasharray = `${dash} ${circ-dash}`;
+  f.setAttribute("stroke", color);
+  f.style.filter = `drop-shadow(0 0 10px ${color})`;
+}
+
+/* ── 렌더 ── */
+function renderData(d) {
+  const lv  = getLevel(d.aqi, AQI_LEVELS);
+  const p25 = getLevel(d.pm25, PM25_LVL);
+  const p10 = getLevel(d.pm10, PM10_LVL);
+
+  document.body.style.background = lv.bg;
+  document.getElementById("glow").style.background = `radial-gradient(circle,${lv.glow} 0%,transparent 70%)`;
+
+  const aqiEl = document.getElementById("aqi-value");
+  aqiEl.textContent = Math.round(d.aqi);
+  aqiEl.style.color = lv.color;
+  aqiEl.style.filter = `drop-shadow(0 0 16px ${lv.glow})`;
+  aqiEl.classList.remove("pop"); void aqiEl.offsetWidth; aqiEl.classList.add("pop");
+  document.getElementById("aqi-grade").textContent = lv.label;
+  document.getElementById("aqi-grade").style.color  = lv.color;
+  drawGauge(d.aqi, lv.color);
+
+  const badge = document.getElementById("pm25-badge");
+  badge.style.display = "block";
+  badge.textContent = `PM2.5 · ${Math.round(d.pm25)} ㎍/㎥ · ${p25.label}`;
+  badge.style.color      = p25.color;
+  badge.style.background = p25.color + "18";
+  badge.style.border     = `1px solid ${p25.color}35`;
+
+  const p10c = d.pm10Grade ? gradeColor(d.pm10Grade) : p10.color;
+  const p10l = d.pm10Grade ? gradeText(d.pm10Grade)  : p10.label;
+  const p25c = d.pm25Grade ? gradeColor(d.pm25Grade) : p25.color;
+  const p25l = d.pm25Grade ? gradeText(d.pm25Grade)  : p25.label;
+
+  const setCard = (id, val, color, sub, subColor) => {
+    const el = document.getElementById("val-"+id);
+    if (el) { el.textContent = val != null ? Math.round(val) : "—"; if(color) el.style.color=color; }
+    const sb = document.getElementById("sub-"+id);
+    if (sb) { sb.textContent = sub||""; if(subColor) sb.style.color=subColor; }
+  };
+  setCard("pm10", d.pm10, p10c, p10l, p10c);
+  setCard("pm25", d.pm25, p25c, p25l, p25c);
+  setCard("o3",   d.o3);
+  setCard("no2",  d.no2);
+
+  // 날씨
+  const [icon, desc] = wxCode(d.wcode ?? 0);
+  document.getElementById("weather-icon").textContent = icon;
+  document.getElementById("weather-desc").textContent = desc;
+  document.getElementById("val-temp").textContent    = d.temp   != null ? Math.round(d.temp)   : "—";
+  document.getElementById("val-feels").textContent   = d.feels  != null ? Math.round(d.feels)  : "—";
+  document.getElementById("val-hum").textContent     = d.humidity != null ? Math.round(d.humidity) : "—";
+  document.getElementById("val-precip").textContent  = d.precip != null ? d.precip.toFixed(1) : "0.0";
+  document.getElementById("val-wind").textContent    = d.wind   != null ? d.wind.toFixed(1)   : "—";
+
+  // 내일 예보
+  const [tIcon, tDesc] = wxCode(d.tmrCode ?? 0);
+  document.getElementById("tmr-icon").textContent    = tIcon;
+  document.getElementById("tmr-desc").textContent    = tDesc;
+  document.getElementById("tmr-high").textContent    = d.tmrHigh  != null ? Math.round(d.tmrHigh)+"°"  : "—";
+  document.getElementById("tmr-low").textContent     = d.tmrLow   != null ? Math.round(d.tmrLow)+"°"   : "—";
+  document.getElementById("tmr-precip").textContent  = d.tmrPrecip != null ? d.tmrPrecip.toFixed(1)+"mm" : "—";
+
+  // 푸터
+  document.getElementById("station-name").textContent = d.station ? `📍 ${d.station}` : "";
+  const sb2 = document.getElementById("source-badge");
+  sb2.style.display = "inline";
+  const isReal = d.source === "실시간";
+  sb2.textContent = isReal ? "실시간" : "계절 평균";
+  sb2.style.color  = isReal ? "#5BF6A090" : "#F6C15B80";
+  sb2.style.border = `1px solid ${isReal?"#5BF6A040":"#F6C15B30"}`;
+
+  const n = new Date();
+  document.getElementById("updated-text").textContent =
+    `${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")} 갱신 · 30분 자동`;
+
+  document.getElementById("loading").style.display   = "none";
+  document.getElementById("data-view").style.display = "flex";
+}
+
+function gradeText(g)  { return ["","좋음","보통","나쁨","매우나쁨"][parseInt(g)] || ""; }
+function gradeColor(g) { return ["","#5BCCF6","#5BF6A0","#F6C15B","#F67A5B"][parseInt(g)] || "#aaa"; }
+
+/* ── WAQI fetch + JSONP ── */
+async function tryFetch(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("HTTP "+res.status);
+  const j = await res.json();
+  if (j.status !== "ok") throw new Error(j.data||"error");
+  return j.data;
+}
+function tryJsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cb = "_waqi_"+Date.now();
+    const s  = document.createElement("script");
+    const t  = setTimeout(() => { delete window[cb]; s.remove(); reject(new Error("timeout")); }, 8000);
+    window[cb] = data => {
+      clearTimeout(t); delete window[cb]; s.remove();
+      data.status === "ok" ? resolve(data.data) : reject(new Error(data.data));
+    };
+    s.onerror = () => { clearTimeout(t); delete window[cb]; s.remove(); reject(new Error("script error")); };
+    s.src = url + "&callback=" + cb;
+    document.head.appendChild(s);
+  });
+}
+
+/* ── 메인 fetch ── */
+async function fetchAll() {
+  document.getElementById("loading").style.display   = "flex";
+  document.getElementById("data-view").style.display = "none";
+
+  const waqiUrls = [
+    `https://api.waqi.info/feed/changwon/?token=${WAQI_TOKEN}`,
+    `https://api.waqi.info/feed/geo:${LAT};${LON}/?token=${WAQI_TOKEN}`,
+  ];
+
+  let aqi = null;
+  for (const url of waqiUrls) {
+    try { aqi = await tryFetch(url); break; } catch(e) {}
+  }
+  if (!aqi) {
+    for (const url of waqiUrls) {
+      try { aqi = await tryJsonp(url); break; } catch(e) {}
+    }
+  }
+
+  // Open-Meteo — 현재 날씨 + 내일 예보
+  let wx = null;
+  try {
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+      `&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum` +
+      `&timezone=Asia%2FSeoul&forecast_days=2`
+    );
+    if (res.ok) wx = await res.json();
+  } catch(e) {}
+
+  if (aqi) {
+    const pm10 = aqi.iaqi?.pm10?.v ?? null;
+    const pm25 = aqi.iaqi?.pm25?.v ?? null;
+    const pm10Grade = pm10==null?null: pm10<=30?1:pm10<=80?2:pm10<=150?3:4;
+    const pm25Grade = pm25==null?null: pm25<=15?1:pm25<=35?2:pm25<=75?3:4;
+    const cur  = wx?.current;
+    const day1 = wx?.daily;   // index 1 = 내일
+
+    renderData({
+      aqi:  aqi.aqi, pm10, pm25,
+      o3:   aqi.iaqi?.o3?.v  ?? null,
+      no2:  aqi.iaqi?.no2?.v ?? null,
+      pm10Grade, pm25Grade,
+      temp:     cur?.temperature_2m          ?? aqi.iaqi?.t?.v ?? null,
+      humidity: cur?.relative_humidity_2m    ?? aqi.iaqi?.h?.v ?? null,
+      feels:    cur?.apparent_temperature    ?? null,
+      precip:   cur?.precipitation           ?? 0,
+      wind:     cur?.wind_speed_10m != null ? cur.wind_speed_10m / 3.6 : null, // km/h → m/s
+      wcode:    cur?.weather_code            ?? 0,
+      tmrHigh:  day1?.temperature_2m_max?.[1] ?? null,
+      tmrLow:   day1?.temperature_2m_min?.[1] ?? null,
+      tmrPrecip:day1?.precipitation_sum?.[1]  ?? null,
+      tmrCode:  day1?.weather_code?.[1]       ?? 0,
+      station:  aqi.city?.name ?? "창원",
+      source:   "실시간",
+    });
+  } else {
+    renderData(seasonal());
+  }
+}
+
+fetchAll();
+setInterval(fetchAll, 30 * 60 * 1000);
+
+/* ── Wake Lock ── */
+async function keepAwake() {
+  try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch(e) {}
+}
+keepAwake();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") keepAwake();
+});
+</script>
+</body>
+</html>
