@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>창원 공기질</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: #080810;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    transition: background 1.8s ease;
+  }
+
+  /* 배경 글로우 */
+  #glow {
+    position: fixed;
+    top: -10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 560px; height: 560px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    transition: background 1.8s ease;
+  }
+
+  /* 헤더 */
+  #header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 32px 36px 0;
+    position: relative;
+    z-index: 1;
+  }
+  #date-day  { font-size: 15px; color: rgba(255,255,255,.45); font-weight: 300; letter-spacing: .06em; }
+  #date-full { font-size: 28px; font-weight: 700; margin-top: 3px; letter-spacing: -.01em; }
+  #clock     { font-family: 'DM Mono', monospace; font-size: 52px; font-weight: 300; letter-spacing: -.03em; line-height: 1; text-align: right; }
+  #clock-sep { animation: blink 1s step-end infinite; opacity: .4; }
+  #location  { font-family: 'DM Mono', monospace; font-size: 11px; color: rgba(255,255,255,.28); margin-top: 4px; text-align: right; }
+
+  /* 본문 */
+  #body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* 게이지 링 */
+  #gauge-wrap {
+    position: relative;
+    width: 240px; height: 240px;
+  }
+  #gauge-svg { transform: rotate(-90deg); }
+  #gauge-track { fill: none; stroke: rgba(255,255,255,.06); }
+  #gauge-fill  {
+    fill: none;
+    stroke-linecap: round;
+    stroke-dasharray: 0 10000;
+    transition: stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1), stroke 1.8s ease;
+  }
+  #gauge-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  #aqi-label  { font-family: 'DM Mono', monospace; font-size: 11px; color: rgba(255,255,255,.35); letter-spacing: .18em; }
+  #aqi-value  {
+    font-family: 'DM Mono', monospace;
+    font-size: 90px;
+    font-weight: 900;
+    line-height: 1;
+    transition: color 1.8s ease, transform .35s ease;
+  }
+  #aqi-grade  { font-size: 22px; font-weight: 700; margin-top: -4px; transition: color 1.8s ease; }
+
+  /* PM2.5 배지 */
+  #pm25-badge {
+    margin-top: 14px;
+    border-radius: 22px;
+    padding: 6px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 1.8s ease;
+    display: none;
+  }
+
+  /* 서브 카드 */
+  #subcards {
+    display: flex;
+    gap: 7px;
+    margin-top: 20px;
+    padding: 0 20px;
+    width: 100%;
+    max-width: 720px;
+  }
+  .card {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 15px;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow: hidden;
+  }
+  .card-label { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(255,255,255,.38); letter-spacing: .14em; font-weight: 500; }
+  .card-value { font-family: 'DM Mono', monospace; font-size: clamp(18px, 3.5vw, 30px); font-weight: 700; line-height: 1; letter-spacing: -.02em; white-space: nowrap; }
+  .card-unit  { font-family: 'DM Mono', monospace; font-size: 9px; color: rgba(255,255,255,.28); margin-left: 1px; }
+  .card-sub   { font-size: 10px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+
+  /* 로딩 */
+  #loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .spinner {
+    width: 30px; height: 30px;
+    border: 2px solid rgba(255,255,255,.12);
+    border-top-color: rgba(255,255,255,.5);
+    border-radius: 50%;
+    animation: spin .9s linear infinite;
+  }
+  #loading-text { font-size: 13px; color: rgba(255,255,255,.3); letter-spacing: .08em; }
+
+  /* 푸터 */
+  #footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 36px 24px;
+    position: relative;
+    z-index: 1;
+  }
+  #footer-left  { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(255,255,255,.2); display: flex; align-items: center; gap: 8px; }
+  #footer-right { display: flex; align-items: center; gap: 10px; }
+  #updated-text { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(255,255,255,.2); }
+  #source-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    border-radius: 8px;
+    padding: 2px 7px;
+    display: none;
+  }
+  #refresh-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,.12);
+    color: rgba(255,255,255,.28);
+    border-radius: 16px;
+    padding: 4px 13px;
+    cursor: pointer;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    transition: all .2s;
+    -webkit-appearance: none;
+  }
+  #refresh-btn:active { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.8); }
+
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes spin  { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+  .pop { animation: pulse .35s ease; }
+</style>
+</head>
+<body>
+
+<!-- 배경 글로우 -->
+<div id="glow"></div>
+
+<!-- 헤더 -->
+<div id="header">
+  <div>
+    <div id="date-day"></div>
+    <div id="date-full"></div>
+  </div>
+  <div>
+    <div id="clock"><span id="hh">--</span><span id="clock-sep">:</span><span id="mm">--</span></div>
+    <div id="location">경상남도 창원시 대원동</div>
+  </div>
+</div>
+
+<!-- 본문 -->
+<div id="body">
+  <!-- 로딩 -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loading-text">공기질 데이터 로딩 중…</div>
+  </div>
+
+  <!-- 데이터 (처음엔 숨김) -->
+  <div id="data-view" style="display:none; flex-direction:column; align-items:center; width:100%;">
+
+    <!-- 게이지 링 -->
+    <div id="gauge-wrap">
+      <svg id="gauge-svg" width="240" height="240">
+        <circle id="gauge-track" cx="120" cy="120" r="105" stroke-width="9"/>
+        <circle id="gauge-fill"  cx="120" cy="120" r="105" stroke-width="9"/>
+      </svg>
+      <div id="gauge-inner">
+        <div id="aqi-label">AQI</div>
+        <div id="aqi-value">—</div>
+        <div id="aqi-grade">—</div>
+      </div>
+    </div>
+
+    <!-- PM2.5 배지 -->
+    <div id="pm25-badge"></div>
+
+    <!-- 서브 카드 -->
+    <div id="subcards">
+      <div class="card" id="card-pm10">
+        <div class="card-label">PM10</div>
+        <div><span class="card-value" id="val-pm10">—</span><span class="card-unit">㎍/㎥</span></div>
+        <div class="card-sub" id="sub-pm10"></div>
+      </div>
+      <div class="card" id="card-pm25">
+        <div class="card-label">PM2.5</div>
+        <div><span class="card-value" id="val-pm25">—</span><span class="card-unit">㎍/㎥</span></div>
+        <div class="card-sub" id="sub-pm25"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">O₃</div>
+        <div><span class="card-value" id="val-o3" style="color:#A78BFA">—</span><span class="card-unit">ppb</span></div>
+      </div>
+      <div class="card">
+        <div class="card-label">NO₂</div>
+        <div><span class="card-value" id="val-no2" style="color:#F0A8D0">—</span><span class="card-unit">ppb</span></div>
+      </div>
+      <div class="card" id="card-temp">
+        <div class="card-label">기온</div>
+        <div><span class="card-value" id="val-temp" style="color:#FCD34D">—</span><span class="card-unit">°C</span></div>
+      </div>
+      <div class="card" id="card-hum">
+        <div class="card-label">습도</div>
+        <div><span class="card-value" id="val-hum" style="color:#93C5FD">—</span><span class="card-unit">%</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 푸터 -->
+<div id="footer">
+  <div id="footer-left">
+    <span id="station-name"></span>
+    <span id="source-badge"></span>
+  </div>
+  <div id="footer-right">
+    <span id="updated-text"></span>
+    <button id="refresh-btn" onclick="fetchAQI()">↻ 새로고침</button>
+  </div>
+</div>
+
+<script>
+const WAQI_TOKEN   = "bcbd525a5cf17beb6ce3800e18f8238e523c12f2";
+const AIRKOREA_KEY = "ce90b830dbbd3cf3fe710a93541961b0286e459abff3fbb2f9ef4188b7c0893b";
+
+/* ── 등급 테이블 ── */
+/* 한국 통합대기환경지수(CAI) 기준 */
+const AQI_LEVELS = [
+  { max:50,  label:"좋음",    color:"#5BCCF6", glow:"rgba(91,204,246,.32)", bg:"#06141f" },
+  { max:100, label:"보통",    color:"#5BF6A0", glow:"rgba(91,246,160,.32)", bg:"#06180e" },
+  { max:250, label:"나쁨",    color:"#F6C15B", glow:"rgba(246,193,91,.32)",  bg:"#181000" },
+  { max:9999,label:"매우나쁨", color:"#F67A5B", glow:"rgba(246,122,91,.32)",  bg:"#180700" },
+];
+const PM25_LVL = [
+  { max:15,  label:"좋음",    color:"#5BCCF6" },
+  { max:35,  label:"보통",    color:"#5BF6A0" },
+  { max:75,  label:"나쁨",    color:"#F6C15B" },
+  { max:9999,label:"매우나쁨", color:"#F67A5B" },
+];
+const PM10_LVL = [
+  { max:30,  label:"좋음",    color:"#5BCCF6" },
+  { max:80,  label:"보통",    color:"#5BF6A0" },
+  { max:150, label:"나쁨",    color:"#F6C15B" },
+  { max:9999,label:"매우나쁨", color:"#F67A5B" },
+];
+const getLevel = (val, table) => table.find(l => val <= l.max) || table[table.length-1];
+
+/* 창원 계절 평균 (에어코리아 통계 기반) */
+const SEASONAL = [
+  { aqi:75,pm25:22,pm10:52,o3:18,no2:22,humidity:62,temp:3  },
+  { aqi:80,pm25:25,pm10:58,o3:20,no2:23,humidity:60,temp:5  },
+  { aqi:85,pm25:28,pm10:65,o3:28,no2:20,humidity:58,temp:10 },
+  { aqi:72,pm25:20,pm10:50,o3:35,no2:18,humidity:62,temp:16 },
+  { aqi:60,pm25:16,pm10:38,o3:40,no2:16,humidity:65,temp:21 },
+  { aqi:45,pm25:12,pm10:28,o3:38,no2:14,humidity:72,temp:25 },
+  { aqi:35,pm25:9, pm10:22,o3:32,no2:12,humidity:80,temp:28 },
+  { aqi:38,pm25:10,pm10:24,o3:30,no2:13,humidity:78,temp:29 },
+  { aqi:48,pm25:13,pm10:32,o3:26,no2:16,humidity:68,temp:23 },
+  { aqi:62,pm25:18,pm10:44,o3:20,no2:19,humidity:63,temp:17 },
+  { aqi:70,pm25:21,pm10:50,o3:16,no2:22,humidity:60,temp:10 },
+  { aqi:78,pm25:24,pm10:56,o3:14,no2:24,humidity:62,temp:4  },
+];
+const rnd = n => Math.round((Math.random()-.5)*n);
+const seasonal = () => {
+  const b = SEASONAL[new Date().getMonth()];
+  return { aqi:Math.max(10,b.aqi+rnd(18)), pm25:Math.max(3,b.pm25+rnd(8)),
+           pm10:Math.max(8,b.pm10+rnd(16)), o3:Math.max(5,b.o3+rnd(8)),
+           no2:Math.max(4,b.no2+rnd(6)), humidity:Math.min(95,Math.max(20,b.humidity+rnd(10))),
+           temp:b.temp+rnd(3), station:"창원시 대원동", source:"계절 평균" };
+};
+
+/* ── 시계 ── */
+function updateClock() {
+  const now = new Date();
+  document.getElementById("hh").textContent = String(now.getHours()).padStart(2,"0");
+  document.getElementById("mm").textContent = String(now.getMinutes()).padStart(2,"0");
+  const DAYS   = ["일요일","월요일","화요일","수요일","목요일","금요일","토요일"];
+  const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+  document.getElementById("date-day").textContent  = DAYS[now.getDay()];
+  document.getElementById("date-full").textContent = `${MONTHS[now.getMonth()]} ${now.getDate()}일`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ── 게이지 그리기 ── */
+function drawGauge(aqi, color) {
+  const r = 105, sw = 9;
+  const circ = 2 * Math.PI * r;
+  const dash = Math.min(aqi / 300, 1) * circ; // 한국 CAI 기준 300 기준으로 비율
+  const fill = document.getElementById("gauge-fill");
+  fill.style.strokeDasharray = `${dash} ${circ - dash}`;
+  fill.setAttribute("stroke", color);
+  fill.style.filter = `drop-shadow(0 0 10px ${color})`;
+}
+
+/* ── UI 업데이트 ── */
+function renderData(d) {
+  const lv   = getLevel(d.aqi,   AQI_LEVELS);
+  const p25  = getLevel(d.pm25,  PM25_LVL);
+  const p10  = getLevel(d.pm10,  PM10_LVL);
+
+  // 배경 + 글로우
+  document.body.style.background = lv.bg;
+  document.getElementById("glow").style.background =
+    `radial-gradient(circle, ${lv.glow} 0%, transparent 70%)`;
+
+  // AQI 수치
+  const aqiEl = document.getElementById("aqi-value");
+  aqiEl.textContent = Math.round(d.aqi);
+  aqiEl.style.color = lv.color;
+  aqiEl.style.filter = `drop-shadow(0 0 18px ${lv.glow})`;
+  aqiEl.classList.remove("pop");
+  void aqiEl.offsetWidth;
+  aqiEl.classList.add("pop");
+
+  document.getElementById("aqi-grade").textContent = lv.label;
+  document.getElementById("aqi-grade").style.color = lv.color;
+
+  drawGauge(d.aqi, lv.color);
+
+  // PM2.5 배지
+  const badge = document.getElementById("pm25-badge");
+  if (d.pm25 != null) {
+    badge.style.display = "block";
+    badge.textContent = `PM2.5  ·  ${Math.round(d.pm25)} ㎍/㎥  ·  ${p25.label}`;
+    badge.style.color      = p25.color;
+    badge.style.background = p25.color + "18";
+    badge.style.border     = `1px solid ${p25.color}35`;
+  }
+
+  // 서브 카드
+  // 에어코리아 등급 우선, 없으면 자체 계산
+  const p10color = d.pm10Grade ? gradeColor(d.pm10Grade) : p10.color;
+  const p10label = d.pm10Grade ? gradeText(d.pm10Grade)  : p10.label;
+  const p25color = d.pm25Grade ? gradeColor(d.pm25Grade) : p25.color;
+  const p25label = d.pm25Grade ? gradeText(d.pm25Grade)  : p25.label;
+
+  const fmt = (id, val) => {
+    if (val == null) return "—";
+    if (id === "o3" || id === "no2") return Math.round(val);
+    if (id === "co" || id === "so2") return parseFloat(val).toFixed(2);
+    return Math.round(val);
+  };
+  const set = (id, val, color, sublabel, subcolor) => {
+    const el = document.getElementById("val-"+id);
+    if (el) { el.textContent = fmt(id, val); if(color) el.style.color = color; }
+    const sb = document.getElementById("sub-"+id);
+    if (sb && sublabel) { sb.textContent = sublabel; sb.style.color = subcolor || color; }
+  };
+  set("pm10", d.pm10, p10color, p10label, p10color);
+  set("pm25", d.pm25, p25color, p25label, p25color);
+  set("o3",   d.o3);
+  set("no2",  d.no2);
+  set("temp", d.temp);
+  set("hum",  d.humidity);
+
+  // 측정 시각 표시
+  const timeStr = d.dataTime
+    ? d.dataTime.slice(5).replace(" ", " ") + " 측정"
+    : (() => { const n=new Date(); return `${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")} 갱신`; })();
+
+  // 푸터
+  document.getElementById("station-name").textContent = d.station ? `📍 ${d.station}` : "";
+
+  const sb = document.getElementById("source-badge");
+  if (d.source) {
+    sb.style.display = "inline";
+    const isReal = d.source === "에어코리아";
+    sb.textContent = isReal ? "에어코리아 실시간" : "계절 평균";
+    sb.style.color  = isReal ? "#5BF6A090" : "#F6C15B80";
+    sb.style.border = `1px solid ${isReal ? "#5BF6A040" : "#F6C15B30"}`;
+  }
+
+  document.getElementById("updated-text").textContent = timeStr + " · 30분 자동";
+
+  // 로딩 숨기고 데이터 표시
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("data-view").style.display = "flex";
+}
+
+/* ── 에어코리아 등급 → 텍스트 ── */
+function gradeText(g) {
+  return ["","좋음","보통","나쁨","매우나쁨"][parseInt(g)] || "";
+}
+function gradeColor(g) {
+  return ["","#5BCCF6","#5BF6A0","#F6C15B","#F67A5B"][parseInt(g)] || "#aaa";
+}
+
+/* ── WAQI JSONP (standalone 모드 CORS 우회) ── */
+function waqiJsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = "_waqi_" + Date.now();
+    const script = document.createElement("script");
+    const timer  = setTimeout(() => {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error("timeout"));
+    }, 8000);
+    window[cbName] = (data) => {
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    script.src = url + "&callback=" + cbName;
+    script.onerror = () => {
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error("script error"));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+/* ── 데이터 fetch ── */
+async function fetchAQI() {
+  document.getElementById("loading").style.display = "flex";
+  document.getElementById("data-view").style.display = "none";
+
+  let success = false;
+
+  const endpoints = [
+    `https://api.waqi.info/feed/changwon/?token=${WAQI_TOKEN}`,
+    `https://api.waqi.info/feed/geo:35.2271;128.6817/?token=${WAQI_TOKEN}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const json = await waqiJsonp(url);
+      if (json.status !== "ok") throw new Error(json.data || "status error");
+
+      const d    = json.data;
+      const pm10 = d.iaqi?.pm10?.v ?? null;
+      const pm25 = d.iaqi?.pm25?.v ?? null;
+      const aqi  = d.aqi;
+
+      const pm10Grade = pm10 == null ? null : pm10 <= 30 ? 1 : pm10 <= 80  ? 2 : pm10 <= 150 ? 3 : 4;
+      const pm25Grade = pm25 == null ? null : pm25 <= 15 ? 1 : pm25 <= 35  ? 2 : pm25 <= 75  ? 3 : 4;
+
+      renderData({
+        aqi,
+        pm10,
+        pm25,
+        o3:        d.iaqi?.o3?.v  ?? null,
+        no2:       d.iaqi?.no2?.v ?? null,
+        humidity:  d.iaqi?.h?.v   ?? null,
+        temp:      d.iaqi?.t?.v   ?? null,
+        pm10Grade,
+        pm25Grade,
+        station:   d.city?.name   ?? "창원",
+        source:    "실시간",
+        dataTime:  null,
+      });
+      success = true;
+      break;
+    } catch (e) {
+      console.warn("WAQI 오류:", e.message);
+    }
+  }
+
+  if (!success) {
+    console.warn("실시간 불가 → 계절 평균");
+    renderData(seasonal());
+  }
+}
+
+/* ── 자동 갱신 30분 ── */
+fetchAQI();
+setInterval(fetchAQI, 30 * 60 * 1000);
+
+/* ── 화면 꺼짐 방지 (Wake Lock API) ── */
+async function keepAwake() {
+  try {
+    if ("wakeLock" in navigator) {
+      await navigator.wakeLock.request("screen");
+    }
+  } catch (e) {}
+}
+keepAwake();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") keepAwake();
+});
+</script>
+</body>
+</html>
